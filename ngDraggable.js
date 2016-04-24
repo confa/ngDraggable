@@ -1,6 +1,9 @@
 /*
  *
  * https://github.com/fatlinesofcode/ngDraggable
+ *
+ * Changed by matt@qordoba.com - Added ng-drag-delay. Adds long-press listener based on MS delay set in attribute
+ *
  */
 angular.module("ngDraggable", [])
         .directive('ngDrag', ['$rootScope', '$parse', function ($rootScope, $parse) {
@@ -8,6 +11,7 @@ angular.module("ngDraggable", [])
                 restrict: 'A',
                 link: function (scope, element, attrs) {
                     scope.value = attrs.ngDrag;
+
                   //  return;
                     var offset,_mx,_my,_tx,_ty;
                     var _hasTouch = ('ontouchstart' in document.documentElement);
@@ -30,7 +34,6 @@ angular.module("ngDraggable", [])
                         toggleListeners(true);
                     };
 
-
                     var toggleListeners = function (enable) {
                         // remove listeners
 
@@ -41,8 +44,10 @@ angular.module("ngDraggable", [])
                         attrs.$observe("ngDrag", onEnableChange);
                         scope.$watch(attrs.ngDragData, onDragDataChange);
                         element.on(_pressEvents, onpress);
+
+                        // MATT MODIFICATION - commented out return false on mousedown - causing issues with other events
                         if(! _hasTouch){
-                            element.on('mousedown', function(){ return false;}); // prevent native drag
+                            //element.on('mousedown', function(){ return false;}); // prevent native drag
                         }
                     };
                     var onDestroy = function (enable) {
@@ -58,24 +63,44 @@ angular.module("ngDraggable", [])
                     /*
                      * When the element is clicked start the drag behaviour
                      * On touch devices as a small delay so as not to prevent native window scrolling
+                     * Do not register press on elements with ng-drag-ignore specified (could be improved)
                      */
                     var onpress = function(evt) {
-                        if(! _dragEnabled)return;
 
+                        var ignoreEls = element.querySelectorAll('[ng-drag-ignore]'),
+                            ignoreElsLen = ignoreEls.length,
+                            ignoredElClicked = false;
 
-                        if(_hasTouch){
+                        for(var i=0; i<ignoreElsLen; i++ ) {
+                            if( evt.target === ignoreEls[i] ) {
+                                ignoredElClicked = true;
+                                break;
+                            }
+                        }
+
+                        if( !ignoredElClicked ) {
+
+                            if(! _dragEnabled)return;
+
+                            // MATT'S MODIFICATION
+                            var dragDelay = parseInt(attrs.ngDragDelay) || 0;
+
+                            if(_hasTouch){
+                                dragDelay = parseInt(attrs.ngDragDelay || 10);
+                            }
+
                             cancelPress();
                             _pressTimer = setTimeout(function(){
                                 cancelPress();
                                 onlongpress(evt);
-                            },100);
+                            },dragDelay);
                             $document.on(_moveEvents, cancelPress);
                             $document.on(_releaseEvents, cancelPress);
-                        }else{
-                            onlongpress(evt);
+
                         }
 
-                    }
+                    };
+
                     var cancelPress = function() {
                         clearTimeout(_pressTimer);
                         $document.off(_moveEvents, cancelPress);
@@ -96,7 +121,6 @@ angular.module("ngDraggable", [])
                         $document.on(_moveEvents, onmove);
                         $document.on(_releaseEvents, onrelease);
                         $rootScope.$broadcast('draggable:start', {x:_mx, y:_my, tx:_tx, ty:_ty, element:element, data:_data});
-
                     }
                     var onmove = function(evt) {
                         if(! _dragEnabled)return;
@@ -143,6 +167,7 @@ angular.module("ngDraggable", [])
             return {
                 restrict: 'A',
                 link: function (scope, element, attrs) {
+
                     scope.value = attrs.ngDrop;
 
                     var _dropEnabled=false;
@@ -180,7 +205,9 @@ angular.module("ngDraggable", [])
                         isTouching(obj.x,obj.y,obj.element);
                     }
                     var onDragEnd = function(evt, obj) {
+
                         if(! _dropEnabled)return;
+
                         if(isTouching(obj.x,obj.y,obj.element)){
                             // call the ngDraggable element callback
                            if(obj.callback){
